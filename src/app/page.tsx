@@ -1,101 +1,158 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import DownloadButton from "@/Components/DownloadButton";
+import InputField from "@/Components/InputField";
+import QualityList from "@/Components/QualityList";
+
+// Hook personalizado para buscar qualidades do vídeo
+const useVideoQualities = (videoUrl: string) => {
+  const [qualities, setQualities] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!videoUrl) {
+      setQualities([]);
+      setError("");
+      return;
+    }
+
+    setError("");
+    setIsLoading(true);
+
+    fetch(
+      `http://localhost:7155/api/v1/DownloaderVideo/available-qualities?url=${encodeURIComponent(
+        videoUrl
+      )}`
+    )
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject("Erro ao buscar a qualidade.")
+      )
+      .then((setQualities))
+      .catch((err) => setError(err))
+      .finally(() => setIsLoading(false));
+  }, [videoUrl]);
+
+  return { qualities, isLoading, error, setError };
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [videoUrl, setVideoUrl] = useState("");
+  const [selectedQuality, setSelectedQuality] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+  const {
+    qualities,
+    isLoading: isLoadingQualities,
+    setError,
+    error,
+  } = useVideoQualities(videoUrl);
+
+  const isValidUrl = useCallback((url: string) => {
+    try {
+      return Boolean(new URL(url));
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const downloadFile = async (downloadUrl: string) => {
+    try {
+      const response = await fetch(downloadUrl);
+      
+      if (!response.ok){
+        setError("Erro ao baixar o vídeo.");
+        return;
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+  
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "video.mp4";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+  
+      alert("Download concluído!");
+    } catch (err) {
+      alert("Erro ao baixar o vídeo.");
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!videoUrl) {
+      setError("Por favor, insira uma URL válida.");
+      return;
+    }
+  
+    setIsDownloading(true);
+    try {
+      const response = await fetch(
+        `http://localhost:7155/api/v1/DownloaderVideo/downloadVideo?url=${videoUrl}&quality=${selectedQuality}`,
+        { method: "POST" }
+      );
+  
+      if (!response.ok) {
+        setError("Erro ao iniciar o download do vídeo.");
+        return;
+      }
+  
+      const { content: downloadUrl } = await response.json();
+      if (!downloadUrl) {
+        setError("Nenhuma URL de download recebida.");
+        return;
+      }
+  
+      downloadFile(downloadUrl);
+    } catch (err) {
+      setError("Ocorreu um erro inesperado ao baixar o vídeo.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+  
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 className="text-2xl font-bold text-center mb-6">
+          Baixador de vídeos do YouTube
+        </h1>
+        <p className="text-gray-600 text-center mb-6">
+          Baixe vídeos do YouTube, transcreva para texto, extraia ou adicione
+          legendas!
+        </p>
+
+        <InputField videoUrl={videoUrl} setVideoUrl={setVideoUrl} />
+
+        {error && (
+          <p className="text-red-500 text-sm text-center mb-4">{error}</p>
+        )}
+        {isLoadingQualities ? (
+          <p className="text-gray-600 text-center mb-4">
+            Carregando qualidades...
+          </p>
+        ) : (
+          <QualityList
+            qualities={qualities}
+            selectedQuality={selectedQuality}
+            onSelectQuality={setSelectedQuality}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        )}
+
+        <DownloadButton
+          onClick={handleDownload}
+          isLoading={isDownloading}
+          showButton={isValidUrl(videoUrl) && qualities.length > 0}
+        />
+
+        <p className="text-gray-500 text-sm text-center mt-6">
+          Ao baixar este vídeo do YouTube, você concorda com as Diretrizes de
+          Uso.
+        </p>
+      </div>
     </div>
   );
 }
