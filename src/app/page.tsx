@@ -21,15 +21,18 @@ const useVideoQualities = (videoUrl: string) => {
     setIsLoading(true);
 
     fetch(
-      `http://localhost:7155/api/v1/DownloaderVideo/available-qualities?url=${encodeURIComponent(
+      `${process.env.API_BASE_URL}/api/v1/DownloaderVideo/available-qualities?url=${encodeURIComponent(
         videoUrl
       )}`
     )
       .then((res) =>
         res.ok ? res.json() : Promise.reject("Erro ao buscar a qualidade.")
       )
-      .then((setQualities))
-      .catch((err) => setError(err))
+      .then(setQualities)
+      .catch((err) => {
+        setError(err);
+        setQualities([]);
+      })
       .finally(() => setIsLoading(false));
   }, [videoUrl]);
 
@@ -41,12 +44,7 @@ export default function Home() {
   const [selectedQuality, setSelectedQuality] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const {
-    qualities,
-    isLoading: isLoadingQualities,
-    setError,
-    error,
-  } = useVideoQualities(videoUrl);
+  const { qualities, isLoading, setError, error } = useVideoQualities(videoUrl);
 
   const isValidUrl = useCallback((url: string) => {
     try {
@@ -59,15 +57,15 @@ export default function Home() {
   const downloadFile = async (downloadUrl: string) => {
     try {
       const response = await fetch(downloadUrl);
-      
-      if (!response.ok){
+
+      if (!response.ok) {
         setError("Erro ao baixar o vídeo.");
         return;
       }
-  
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-  
+
       const a = document.createElement("a");
       a.href = url;
       a.download = "video.mp4";
@@ -75,7 +73,7 @@ export default function Home() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-  
+
       alert("Download concluído!");
     } catch (err) {
       alert("Erro ao baixar o vídeo.");
@@ -87,25 +85,26 @@ export default function Home() {
       setError("Por favor, insira uma URL válida.");
       return;
     }
-  
+
     setIsDownloading(true);
+    
     try {
       const response = await fetch(
-        `http://localhost:7155/api/v1/DownloaderVideo/downloadVideo?url=${videoUrl}&quality=${selectedQuality}`,
+        `${process.env.API_BASE_URL}/api/v1/DownloaderVideo/downloadVideo?url=${videoUrl}&quality=${selectedQuality}`,
         { method: "POST" }
       );
-  
+
       if (!response.ok) {
         setError("Erro ao iniciar o download do vídeo.");
         return;
       }
-  
+
       const { content: downloadUrl } = await response.json();
       if (!downloadUrl) {
         setError("Nenhuma URL de download recebida.");
         return;
       }
-  
+
       downloadFile(downloadUrl);
     } catch (err) {
       setError("Ocorreu um erro inesperado ao baixar o vídeo.");
@@ -113,7 +112,7 @@ export default function Home() {
       setIsDownloading(false);
     }
   };
-  
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
@@ -127,20 +126,13 @@ export default function Home() {
 
         <InputField videoUrl={videoUrl} setVideoUrl={setVideoUrl} />
 
-        {error && (
-          <p className="text-red-500 text-sm text-center mb-4">{error}</p>
-        )}
-        {isLoadingQualities ? (
-          <p className="text-gray-600 text-center mb-4">
-            Carregando qualidades...
-          </p>
-        ) : (
-          <QualityList
-            qualities={qualities}
-            selectedQuality={selectedQuality}
-            onSelectQuality={setSelectedQuality}
-          />
-        )}
+        <QualityList
+          error={error}
+          isLoading={isLoading}
+          qualities={qualities}
+          selectedQuality={selectedQuality}
+          onSelectQuality={setSelectedQuality}
+        />
 
         <DownloadButton
           onClick={handleDownload}
